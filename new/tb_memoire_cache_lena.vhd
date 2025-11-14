@@ -34,131 +34,178 @@ use ieee.std_logic_textio.all;
 --use UNISIM.VComponents.all;
 
 entity tb_memoire_cache_lena is
---  Port ( );
 end tb_memoire_cache_lena;
 
 architecture Behavioral of tb_memoire_cache_lena is
 
-component memoire_cache is
-  generic(
-    LARGEUR_IMAGE : integer := 128;
-    HAUTEUR_IMAGE : integer := 128
-  );
-  port(
-    clk, rst   : in  std_logic;
-    pixel_entree     : in  std_logic_vector(7 downto 0);
-    pixel_valide     : in  std_logic;
-    wr_en_fifo1, wr_en_fifo2, en_milieu, en_haut : in std_logic;
-    p00, p01, p02 : out std_logic_vector(7 downto 0);
-    p10, p11, p12 : out std_logic_vector(7 downto 0);
-    p20, p21, p22 : out std_logic_vector(7 downto 0);
+  component memoire_cache is
+    generic(
+      LARGEUR_IMAGE : integer := 128;
+      HAUTEUR_IMAGE : integer := 128
+    );
+    port(
+      clk, rst   : in  std_logic;
+      pixel_entree     : in  std_logic_vector(7 downto 0);
+      pixel_valide     : in  std_logic;
+      
+      p00, p01, p02 : out std_logic_vector(7 downto 0);
+      p10, p11, p12 : out std_logic_vector(7 downto 0);
+      p20, p21, p22 : out std_logic_vector(7 downto 0);
 
-    fenetre_valide  : out std_logic
-  );
+      fenetre_valide  : out std_logic
+    );
+  end component;
+
+  constant LARGEUR_IMAGE : integer := 128;
+  constant HAUTEUR_IMAGE : integer := 128;
   
-end component;
-
-
-  signal LARGEUR_IMAGE : integer := 128;
-  signal HAUTEUR_IMAGE : integer := 128;
-  signal I1 : std_logic_vector (7 downto 0);
   signal clk : std_logic := '0';
-  signal O1 : std_logic_vector (7 downto 0); 
-  signal DATA_AVAILABLE : std_logic;
+  signal rst : std_logic := '1';
+  signal pixel_entree : std_logic_vector(7 downto 0);
+  signal pixel_valide : std_logic := '0';
   
-  signal p00, p01, p02 : std_logic_vector(7 downto 0) := (others => '0');
-  signal p10, p11, p12 : std_logic_vector(7 downto 0) := (others => '0');
-  signal p20, p21, p22 : std_logic_vector(7 downto 0) := (others => '0');
+  signal p00, p01, p02 : std_logic_vector(7 downto 0);
+  signal p10, p11, p12 : std_logic_vector(7 downto 0);
+  signal p20, p21, p22 : std_logic_vector(7 downto 0);
   
-  signal pixel_entree : std_logic_vector(7 downto 0):= x"00";
-  signal fenetre_valide, rst: std_logic;
-  signal wr_en_fifo1, wr_en_fifo2, en_milieu, en_haut : std_logic := '0';
+  signal fenetre_valide : std_logic;
 
 begin
 
-memoire: memoire_cache
-    generic map( LARGEUR_IMAGE => LARGEUR_IMAGE,
-                 HAUTEUR_IMAGE => HAUTEUR_IMAGE)
-    port map ( clk => clk,
-               rst => rst,
-               pixel_entree => pixel_entree,
-               pixel_valide => DATA_AVAILABLE,
-               wr_en_fifo1 => wr_en_fifo1, 
-               wr_en_fifo2 => wr_en_fifo2, 
-               en_milieu => en_milieu, 
-               en_haut => en_haut,
-               p00 => p00,
-               p01 => p01,
-               p02 => p02,
-               p10 => p10,
-               p11 => p11,
-               p12 => p12,
-               p20 => p20,
-               p21 => p21,
-               p22 => p22,
-               fenetre_valide => fenetre_valide);
-               
-        
-clk <= not clk after 5 ns;
-p_read: process
-  FILE vectors : text;
-  variable Iline : line;
-  variable I1_var :std_logic_vector (7 downto 0);
+  -- Instanciation de la mémoire cache
+  memoire: memoire_cache
+    generic map(
+      LARGEUR_IMAGE => LARGEUR_IMAGE,
+      HAUTEUR_IMAGE => HAUTEUR_IMAGE
+    )
+    port map(
+      clk => clk,
+      rst => rst,
+      pixel_entree => pixel_entree,
+      pixel_valide => pixel_valide,
+      p00 => p00,
+      p01 => p01,
+      p02 => p02,
+      p10 => p10,
+      p11 => p11,
+      p12 => p12,
+      p20 => p20,
+      p21 => p21,
+      p22 => p22,
+      fenetre_valide => fenetre_valide
+    );
 
+  -- Génération de l'horloge (période 10 ns)
+  clk <= not clk after 5 ns;
 
-begin
-	DATA_AVAILABLE <= '0';
-    file_open (vectors,"Lena128x128g_8bits.dat", read_mode);
+  -- Processus de reset
+  process
+  begin
+    rst <= '1';
+    wait for 100 ns;
+    rst <= '0';
+    wait;
+  end process;
+
+  -- Processus de lecture du fichier image
+  p_read: process
+    file vectors : text;
+    variable Iline : line;
+    variable I1_var : std_logic_vector(7 downto 0);
+  begin
+    pixel_valide <= '0';
+    pixel_entree <= (others => '0');
+    wait for 10 ns;
+    -- Attente fin du reset
+    wait until rst = '0';
+    wait for 200 ns;
+    
+    -- Ouverture du fichier
+    file_open(vectors, "Lena128x128g_8bits.dat", read_mode);
+    
+    -- Lecture et envoi des pixels
+    while not endfile(vectors) loop
+      wait until rising_edge(clk);
+      
+      -- Lecture d'un pixel
+      readline(vectors, Iline);
+      read(Iline, I1_var);
+      pixel_entree <= I1_var;
+      pixel_valide <= '1';
+     
+    end loop;
+    
+    -- Fin de la lecture
+    wait until rising_edge(clk);
+    pixel_valide <= '0';
+    
+    file_close(vectors);
+    wait;
+  end process;
+  
+  
+
+  -- Processus d'écriture des résultats
+  p_write: process
+    file results : text;
+    variable OLine : line;
+    variable compteur : integer := 0;
+  begin
+    -- Attente fin du reset
+    wait until rst = '0';
     wait for 20 ns;
     
-    while not endfile(vectors) loop
-      readline (vectors,Iline);
-      read (Iline,I1_var);
-      pixel_entree <= I1_var;
-      
-	  DATA_AVAILABLE <= '1';
-	  wait for 10 ns;
-    end loop;
-    DATA_AVAILABLE <= '0';
-    wait for 10 ns;
-    file_close (vectors);
-    wait;
-end process;
-
-p_write: process
-  file results : text;
-  variable OLine : line;
-  variable O1_var :std_logic_vector (7 downto 0);
+    -- Ouverture du fichier de sortie
+    file_open(results, "Lena128x128g_8bits_matrice.dat", write_mode);
     
-    begin
-    file_open (results,"Lena128x128g_8bits_matrice.dat", write_mode);
-    wait for 10 ns;
-    wait until DATA_AVAILABLE = '1';
-    wait for 10 ns;
-    while DATA_AVAILABLE ='1' loop
-      write (Oline, O1, right, 2);
-      writeline (results, Oline);
-      wait for 10 ns;  
+    -- Attente de la première fenêtre valide
+    wait until fenetre_valide = '1';
+    
+    -- Écriture des fenêtres 3x3
+ 
+    while pixel_valide = '1' or fenetre_valide = '1' loop
+      wait until rising_edge(clk);
+      
+      if fenetre_valide = '1' then
+        -- Écriture de la fenêtre 3x3 complète
+        write(OLine, string'("Fenetre ")); --j'ecris Fenetre au debut de chaque fenetre
+        write(OLine, compteur);
+        write(OLine, string'(":"));
+        writeline(results, OLine);
+        
+        -- Ligne du haut
+        write(OLine, p00, right, 4);
+        write(OLine, string'(":"));
+        write(OLine, p01, right, 4);
+        write(OLine, string'(":"));
+        write(OLine, p02, right, 4);
+        writeline(results, OLine);
+        
+        -- Ligne du milieu
+        write(OLine, p10, right, 4);
+        write(OLine, string'(":"));
+        write(OLine, p11, right, 4);
+        write(OLine, string'(":"));
+        write(OLine, p12, right, 4);
+        writeline(results, OLine);
+        
+        -- Ligne du bas
+        write(OLine, p20, right, 4);
+        write(OLine, string'(":"));
+        write(OLine, p21, right, 4);
+        write(OLine, string'(":"));
+        write(OLine, p22, right, 4);
+        writeline(results, OLine);
+        
+        write(OLine, string'(""));
+        writeline(results, OLine);
+        
+        compteur := compteur + 1;
+      end if;
     end loop;
-    file_close (results);
+    
+    file_close(results);
     wait;
- end process;
- 
- O1 <= p12;
- 
- process
-begin
-    wait until (DATA_AVAILABLE = '1');
-    wait for 25 ns;
-    wr_en_fifo1 <= '1';
-    wait for 1240 ns ;
-    en_milieu <= '1';
-    wait for 25 ns;
-    wr_en_fifo2 <= '1';
-    wait for 1240 ns ;
-    en_haut <= '1';
-         
-
-end process;
+  end process;
  
 end Behavioral;
